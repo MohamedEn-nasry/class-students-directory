@@ -1,0 +1,14 @@
+.dockerignore
+.gitignore
+Dockerfile
+README.md
+**/bin/
+**/obj/
+**/TestResults/
+supabase/
+tests/
+*.sln
+*.md
+!src/**/appsettings.example.json
+.vs/
+.vscode/

@@ -1,0 +1,22 @@
+# Build outputs
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+[Ll]og/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# Test results
+TestResults/
+coverage*/
+
+# Secrets — never commit real connection strings or salts
+src/**/appsettings.Development.json
+src/**/appsettings.Production.json
+*.pfx
+
+# OS
+.DS_Store
+Thumbs.db

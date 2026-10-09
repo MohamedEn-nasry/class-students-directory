@@ -1,0 +1,23 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+**/bin/
+**/obj/
+**/dist/
+**/dist-ssr/
+*.user
+*.suo
+.vs/
+.vscode/
+
+# Environment / Secrets
+.env
+.env.*.local
+src/**/appsettings.Development.json
+src/**/appsettings.Production.json
+
+# OS / Logs
+.DS_Store
+Thumbs.db
+npm-debug.log*
