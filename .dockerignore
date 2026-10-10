@@ -1,0 +1,11 @@
+.git
+.dockerignore
+.gitignore
+**/bin/
+**/obj/
+**/TestResults/
+Backend/supabase/
+Backend/tests/
+*.md
+.vs/
+.vscode/
