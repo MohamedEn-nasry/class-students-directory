@@ -21,18 +21,23 @@ builder.Services.Configure<IpHashingOptions>(builder.Configuration.GetSection("I
 builder.Services.Configure<TurnstileOptions>(builder.Configuration.GetSection("Turnstile"));
 
 // ---------- Database: Supabase pooler via env ConnectionStrings__Supabase ----------
-// Supavisor transaction pooler (port 6543) does NOT support prepared statements,
-// so we disable auto-prepare + connection reset by default (Database:DisablePreparedStatements=true).
 var supabaseConn = builder.Configuration.GetConnectionString("Supabase");
 if (string.IsNullOrWhiteSpace(supabaseConn))
 {
-    // Fail fast with a clear message instead of a cryptic Npgsql error.
-    // In Development without a DB, tests still run (they don't need the DB).
-    Console.WriteLine("WARNING: ConnectionStrings:Supabase is not set. API will start but DB calls will fail until ConnectionStrings__Supabase is provided.");
+    Console.WriteLine("[STARTUP] WARNING: ConnectionStrings:Supabase is NOT set. DB calls will fail.");
     supabaseConn = "Host=localhost;Port=5432;Database=missing;Username=missing;Password=missing";
+}
+else
+{
+    // Log masked connection string so we can verify Render is using the right value
+    var masked = System.Text.RegularExpressions.Regex.Replace(
+        supabaseConn, @"Password=[^;]+", "Password=****");
+    Console.WriteLine($"[STARTUP] ConnectionStrings:Supabase = {masked}");
 }
 
 var disablePrepared = builder.Configuration.GetValue("Database:DisablePreparedStatements", true);
+Console.WriteLine($"[STARTUP] Database:DisablePreparedStatements = {disablePrepared}");
+
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(supabaseConn);
 if (disablePrepared)
 {
@@ -45,14 +50,27 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 {
     options.UseNpgsql(dataSource, npgsql =>
     {
-        // Supabase Postgres 15; pinning avoids a version-lookup roundtrip on startup.
         npgsql.SetPostgresVersion(new Version(15, 0));
     });
 });
 
-// ---------- Health (DB liveness; no extra package needed) ----------
+// ---------- Health: raw Npgsql SELECT 1 to expose real DB errors ----------
 builder.Services.AddHealthChecks()
-    .AddDbContextCheck<AppDbContext>("db");
+    .AddAsyncCheck("db", async (cancellationToken) =>
+    {
+        try
+        {
+            using var conn = new NpgsqlConnection(supabaseConn);
+            await conn.OpenAsync(cancellationToken);
+            using var cmd = new NpgsqlCommand("SELECT 1", conn);
+            await cmd.ExecuteScalarAsync(cancellationToken);
+            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Healthy();
+        }
+        catch (Exception ex)
+        {
+            return Microsoft.Extensions.Diagnostics.HealthChecks.HealthCheckResult.Unhealthy(exception: ex);
+        }
+    });
 
 // ---------- CORS: frontend origin(s) only ----------
 var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
@@ -191,8 +209,11 @@ app.MapHealthChecks("/health", new Microsoft.AspNetCore.Diagnostics.HealthChecks
             {
                 name = e.Key,
                 status = e.Value.Status.ToString(),
-                error = e.Value.Exception?.Message,
-                description = e.Value.Description
+                error = e.Value.Exception?.ToString(),       // full stack trace
+                message = e.Value.Exception?.Message,
+                inner = e.Value.Exception?.InnerException?.ToString(),
+                description = e.Value.Description,
+                data = e.Value.Data
             })
         };
         await context.Response.WriteAsJsonAsync(result);
